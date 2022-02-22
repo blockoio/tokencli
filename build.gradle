@@ -1,0 +1,61 @@
+plugins {
+    // Apply the application plugin to add support for building a CLI application in Java.
+    id 'java'
+    id 'application'
+
+    id "com.peterabeles.gversion" version "1.10"
+}
+
+version 'unspecified'
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    herajVersion = "1.4.2"
+    jacksonVersion = "2.12.5"
+    springBootVersion = "2.5.7"
+    springfoxVersion = "3.0.0"
+    mysqlVersion = "8.0.25"
+    logbackVersion = "1.2.10"
+    lombokVersion = "1.18.20"
+    mockitoVersion = "3.9.0"
+    junitJupiterVersion = "5.7.2"
+    logbackVersion = "1.2.7"
+    okhttpVersion = "3.14.9"
+}
+
+dependencies {
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    runtimeOnly "ch.qos.logback:logback-core:${logbackVersion}"
+
+    implementation 'org.slf4j:slf4j-api:1.7.30'
+
+
+    // http callback
+    implementation "com.squareup.okhttp3:okhttp:${okhttpVersion}"
+    testImplementation "com.squareup.okhttp3:mockwebserver:${okhttpVersion}"
+
+    implementation "io.aergo:heraj-transport:${herajVersion}"
+    implementation "io.aergo:heraj-wallet:${herajVersion}"
+    implementation "io.aergo:heraj-smart-contract:${herajVersion}"
+
+    implementation platform("com.fasterxml.jackson:jackson-bom:${jacksonVersion}")
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.module:jackson-module-parameter-names:${jacksonVersion}"
+
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+
+
+gversion {
+    srcDir = "build/generated/sources/version"           // path is relative to the sub-project by default
+}
