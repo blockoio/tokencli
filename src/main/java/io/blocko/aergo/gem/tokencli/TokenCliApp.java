@@ -1,8 +1,6 @@
 package io.blocko.aergo.gem.tokencli;
 
-import hera.api.model.Authentication;
-import hera.api.model.ContractAddress;
-import hera.api.model.ContractInterface;
+import hera.api.model.*;
 import hera.client.AergoClient;
 import hera.client.AergoClientBuilder;
 import hera.exception.HerajException;
@@ -25,15 +23,20 @@ public class TokenCliApp {
     private static final String walletAddr = "AmNQ6skDfZEF6F47eoMYdFPvupyZcGWag2D1jHxkW9iPdiaAv4LB";
     private static final String walletPK = "47YaDMC5z7KGvFFpfJk5wDusCQaqpEy6PMR9TyseM58tg3stMf11DbbPVHcPbxrzJ44Qp2mNj";
     private static final String walletPass = "1234";
-    private static final String historyUrl = "http://218.147.120.149:27876/testnet/tokenTransfers";
 
     public static Map<String, String> networkUrlMap;
+    public static Map<String, String> scanUrlMap;
 
     static {
         networkUrlMap = new HashMap<>();
         networkUrlMap.put("main", "mainnet-api.aergo.io:7845");
         networkUrlMap.put("test", "testnet-api.aergo.io:7845");
-        networkUrlMap.put("alpha", "alpha-api.aergo.io:7845");
+//        networkUrlMap.put("alpha", "alpha-api.aergo.io:7845");
+        scanUrlMap = new HashMap<>();
+        scanUrlMap.put("main", "https://api.aergoscan.io/mainnet/v2");
+        scanUrlMap.put("test", "https://api.aergoscan.io/testnet/v2");
+        // aergoscan 2.0 for alphanet is not available yet.
+//        scanUrlMap.put("alpha", "https://api.aergoscan.io/alphanet/v2");
     }
 
     public enum CMD {
@@ -47,7 +50,7 @@ public class TokenCliApp {
 
         int argCount();
 
-        void execCmd(String apiUrl, String tokenAddress, String... args);
+        void execCmd(String networkName, String tokenAddress, String... args);
     }
 
     public static Map<CMD, Commander> cmdMap;
@@ -61,14 +64,12 @@ public class TokenCliApp {
 
     public static void main(String[] args) throws IOException, GeneralSecurityException {
         if (args.length < 3) {
-            System.err.println("Usage: tokencli <network> <command> [args]");
+            System.err.println("Usage: tokencli <network> <tokenAddress> <command> [args]");
             System.exit(1);
         }
 
-        String apiUrl = networkUrlMap.get(args[0]);
-        if (apiUrl == null) {
-            apiUrl = args[0];
-        }
+        String networkName = args[0];
+        String apiUrl = getRPCUrl(networkName);
         String tokenAddress = args[1];
         CMD cmd = CMD.valueOf(args[2].toUpperCase(Locale.ROOT));
         Commander commander = cmdMap.get(cmd);
@@ -77,7 +78,25 @@ public class TokenCliApp {
             System.err.printf("Usage: tokencli <%s> %s <%d args>", commander.name(), commander.argCount());
             System.exit(1);
         }
-        commander.execCmd(apiUrl, tokenAddress, cmdArgs);
+        commander.execCmd(networkName, tokenAddress, cmdArgs);
+    }
+
+    private static String getRPCUrl(String network) throws IllegalArgumentException {
+        String apiUrl = networkUrlMap.get(network);
+        if (apiUrl == null) {
+            throw new IllegalArgumentException("invalid network");
+        }
+        return apiUrl;
+    }
+    private static String getAergoscanUrl(String network) throws IllegalArgumentException {
+        String apiUrl = scanUrlMap.get(network);
+        if (apiUrl == null) {
+            throw new IllegalArgumentException("invalid network");
+        }
+        return apiUrl;
+    }
+    private static String getHistoryUrl(String network) throws  IllegalArgumentException {
+        return getAergoscanUrl(network)+"/tokenTransfers";
     }
 
     public static AergoClient createConn(String endpoint) {
@@ -110,14 +129,13 @@ public class TokenCliApp {
         }
 
         @Override
-        public void execCmd(String apiUrl, String contract
+        public void execCmd(String networkName, String contract
                 , String... args) {
 
             OkHttpClient client = new OkHttpClient();
-            AergoKey aergoKey = initPikkVoterKeys();
-            String walletAddress = aergoKey.getAddress().getEncoded();
+            String walletAddress = args[0];
 
-            HttpUrl.Builder httpBuilder = HttpUrl.parse(historyUrl).newBuilder();
+            HttpUrl.Builder httpBuilder = HttpUrl.parse(getHistoryUrl(networkName)).newBuilder();
             httpBuilder.addEncodedQueryParameter("q",String.format("(to:%s+OR+from:%s)+AND+NOT+(address:%s)",walletAddress,walletAddress,walletAddress));
 
             String result = null;
@@ -146,11 +164,11 @@ public class TokenCliApp {
         }
 
         @Override
-        public void execCmd(String apiUrl, String contract
+        public void execCmd(String networkName, String contract
                 , String... args) {
-            String receiverAddress = args[0];
+            String receiverAddress = getRPCUrl(networkName);
             String amount = args[1];
-            AergoClient client = createConn(apiUrl);
+            AergoClient client = createConn(networkName);
             ContractAddress contractAddress = ContractAddress.of(contract);
             ContractInterface abi = client.getContractOperation().
                     getContractInterface(contractAddress);
@@ -166,16 +184,32 @@ public class TokenCliApp {
         }
 
         @Override
-        public void execCmd(String apiUrl, String contract
+        public void execCmd(String networkName, String contract
                 , String... args) {
-            AergoClient client = createConn(apiUrl);
+            AergoClient client = createConn(getRPCUrl(networkName));
             ContractAddress contractAddress = ContractAddress.of(contract);
             ContractInterface abi = client.getContractOperation().
                     getContractInterface(contractAddress);
-            TokenWallet wallet = new TokenWallet(initPikkVoterKeys(), client, abi);
-            String balance = wallet.getBalance();
-            System.out.printf("balance of wallet %s is %s\n", wallet.getSignerAddress(), balance);
+            String walletAddress = args[0];
+            String balance = getBalance(AccountAddress.of(walletAddress), client, abi);
+            System.out.printf("balance of wallet %s is %s\n", walletAddress, balance);
         }
+
+        synchronized public String getBalance(AccountAddress walletAddress, AergoClient aergoClient, ContractInterface abi) {
+            ContractInvocation query = abi.newInvocationBuilder()
+                    .function("balanceOf")
+                    .args(walletAddress.getEncoded())
+                    .build();
+            ContractResult result = aergoClient.getContractOperation().query(query);
+            log.debug("Query {} result: {}",query.getArgs().get(0),result);
+            try {
+                BigNum balance = result.bind(BigNum.class);
+                return balance.toString();
+            } catch (IOException e) {
+                throw new RuntimeException("failed to bind result ", e);
+            }
+        }
+
     }
 
 
