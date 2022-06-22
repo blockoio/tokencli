@@ -17,6 +17,9 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.*;
 
+/**
+ * tokencli {networkName} {tokenAddress} {command} [[args] [for] [command]]
+ */
 @Slf4j
 public class TokenCliApp {
     // 설정항목들
@@ -123,6 +126,9 @@ public class TokenCliApp {
         }
     }
 
+    /**
+     * history {walletAddress}
+     */
     static class HistoryCommander extends BaseCommander implements Commander {
         public HistoryCommander() {
             super(CMD.HISTORY.name().toLowerCase(), 0);
@@ -158,6 +164,9 @@ public class TokenCliApp {
 
     }
 
+    /**
+     * transfer {toWalletAddress} {amount}
+     */
     static class TransferCommander extends BaseCommander implements Commander {
         public TransferCommander() {
             super(CMD.TRANSFER.name().toLowerCase(), 2);
@@ -166,7 +175,7 @@ public class TokenCliApp {
         @Override
         public void execCmd(String networkName, String contract
                 , String... args) {
-            String receiverAddress = getRPCUrl(networkName);
+            String receiverAddress = getRPCUrl(args[0]);
             String amount = args[1];
             AergoClient client = createConn(networkName);
             ContractAddress contractAddress = ContractAddress.of(contract);
@@ -174,10 +183,15 @@ public class TokenCliApp {
                     getContractInterface(contractAddress);
             TokenWallet wallet = new TokenWallet(initPikkVoterKeys(), client, abi);
             String txHash = wallet.tranfer(receiverAddress, amount);
-            System.out.printf("transfer from %s to %s was commited : hash %s\n", wallet.getSignerAddress(), receiverAddress, txHash);
+            System.out.printf("transfer from %s to %s was committed : hash %s\n", wallet.getSignerAddress(), receiverAddress, txHash);
         }
     }
 
+    /**
+     * check balance
+     *
+     * balance {walletAddress}
+     */
     static class BalanceCommander extends BaseCommander implements Commander {
         public BalanceCommander() {
             super(CMD.BALANCE.name().toLowerCase(), 0);
